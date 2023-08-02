@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import json
 import argparse
+import yaml
 from functools import partial
 
 import paddle
@@ -32,7 +35,7 @@ from paddlenlp.utils.log import logger
 
 
 @paddle.no_grad()
-def evaluate(model, metric, data_loader, multilingual=False):
+def compute_metrics(model, metric, data_loader, multilingual=False):
     """
     Given a dataset, it evals model and computes the metric.
     Args:
@@ -60,7 +63,7 @@ def evaluate(model, metric, data_loader, multilingual=False):
     return precision, recall, f1
 
 
-def do_eval():
+def evaluate(args):
     paddle.set_device(args.device)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
@@ -90,7 +93,8 @@ def do_eval():
     trans_fn = partial(
         convert_example, tokenizer=tokenizer, max_seq_len=args.max_seq_len, multilingual=args.multilingual
     )
-
+    
+    
     for key in class_dict.keys():
         if args.debug:
             test_ds = MapDataset(class_dict[key])
@@ -103,10 +107,22 @@ def do_eval():
         test_data_loader = create_data_loader(test_ds, mode="test", batch_size=args.batch_size, trans_fn=data_collator)
 
         metric = SpanEvaluator()
-        precision, recall, f1 = evaluate(model, metric, test_data_loader, args.multilingual)
+        precision, recall, f1 = compute_metrics(model, metric, test_data_loader, args.multilingual)
         logger.info("-----------------------------")
         logger.info("Class Name: %s" % key)
         logger.info("Evaluation Precision: %.5f | Recall: %.5f | F1: %.5f" % (precision, recall, f1))
+
+        metrics = {
+            "precision":precision,
+            "recall":recall,
+            "f1":f1
+        }
+
+        if not os.path.exists(args.output_dir):
+                os.makedirs(args.output_dir)
+
+        with open(os.path.join(args.output_dir, "test_metrics.json"), "w", encoding="utf-8") as fp:
+            json.dump(metrics, fp)
 
     if args.debug and len(relation_type_dict.keys()) != 0:
         for key in relation_type_dict.keys():
@@ -117,7 +133,7 @@ def do_eval():
             )
 
             metric = SpanEvaluator()
-            precision, recall, f1 = evaluate(model, metric, test_data_loader)
+            precision, recall, f1 = compute_metrics(model, metric, test_data_loader)
             logger.info("-----------------------------")
             if args.schema_lang == "ch":
                 logger.info("Class Name: X的%s" % key)
@@ -125,21 +141,33 @@ def do_eval():
                 logger.info("Class Name: %s of X" % key)
             logger.info("Evaluation Precision: %.5f | Recall: %.5f | F1: %.5f" % (precision, recall, f1))
 
+            metrics = {
+                "precision":precision,
+                "recall":recall,
+                "f1":f1
+            }
+
+            if not os.path.exists(args.output_dir):
+                os.makedirs(args.output_dir)
+
+            with open(os.path.join(args.output_dir, "test_metrics.json"), "w", encoding="utf-8") as fp:
+                json.dump(metrics, fp)
+
+
+def main():
+
+    with open("configs/eval.yaml", "r") as f:
+        logger.info(f"Loading the config file in {os.path.abspath(f.name)}...")
+        configs = yaml.load(f, Loader=yaml.CSafeLoader)
+
+    parser = argparse.ArgumentParser(description='Argument Parser from Dictionary')
+    for key, value in configs["eval_args"].items():
+        arg_name = '--' + key
+        parser.add_argument(arg_name, default=value, type=type(value))
+
+    eval_args = parser.parse_args()
+    evaluate(eval_args)
 
 if __name__ == "__main__":
-    # yapf: disable
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("--model_path", type=str, default=None, help="The path of saved model that you want to load.")
-    parser.add_argument("--test_path", type=str, default=None, help="The path of test set.")
-    parser.add_argument("--batch_size", type=int, default=16, help="Batch size per GPU/CPU/NPU for training.")
-    parser.add_argument("--device", type=str, default="gpu", choices=["gpu", "cpu", "npu"], help="Device selected for evaluate.")
-    parser.add_argument("--max_seq_len", type=int, default=512, help="The maximum total input sequence length after tokenization.")
-    parser.add_argument("--debug", action='store_true', help="Precision, recall and F1 score are calculated for each class separately if this option is enabled.")
-    parser.add_argument("--multilingual", action='store_true', help="Whether is the multilingual model.")
-    parser.add_argument("--schema_lang", choices=["ch", "en"], default="ch", help="Select the language type for schema.")
-
-    args = parser.parse_args()
-    # yapf: enable
-
-    do_eval()
+    
+    main()

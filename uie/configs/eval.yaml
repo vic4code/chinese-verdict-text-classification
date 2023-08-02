@@ -1,0 +1,12 @@
+# See the details of 'training_args' and 'compression_args' from the websites: https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/trainer/training_args.py and https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/trainer/compression_args.py
+eval_args:      
+    model_path: "./checkpoints/uie"
+    test_path: "dataset/test.txt"
+    output_dir: "./checkpoints/uie/test_results"
+    batch_size: 16
+    device: "gpu"
+    is_eval_by_class: False
+    max_seq_len: 768
+    multilingual: False
+    debug: False
+    schema_lang: "ch"

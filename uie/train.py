@@ -58,10 +58,6 @@ class DataArguments:
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
 
-    test_path: str = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
-    )
-
     max_seq_length: Optional[int] = field(
         default=512,
         metadata={
@@ -199,6 +195,7 @@ def finetune(
     elif last_checkpoint is not None:
         checkpoint = last_checkpoint
 
+
     # Training
     if training_args.do_train:
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
@@ -207,6 +204,7 @@ def finetune(
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
         trainer.save_state()
+
 
     # Evaluate and tests model
     if training_args.do_eval:
@@ -241,53 +239,24 @@ def finetune(
         export_model(model=trainer.model, input_spec=input_spec, path=model_args.export_model_dir)
         trainer.tokenizer.save_pretrained(model_args.export_model_dir)
 
-    if training_args.do_compress:
-
-        @paddle.no_grad()
-        def custom_evaluate(self, model, data_loader):
-            metric = SpanEvaluator()
-            model.eval()
-            metric.reset()
-            for batch in data_loader:
-                if model_args.multilingual:
-                    logits = model(input_ids=batch["input_ids"], position_ids=batch["position_ids"])
-                else:
-                    logits = model(
-                        input_ids=batch["input_ids"],
-                        token_type_ids=batch["token_type_ids"],
-                        position_ids=batch["position_ids"],
-                        attention_mask=batch["attention_mask"],
-                    )
-                start_prob, end_prob = logits
-                start_ids, end_ids = batch["start_positions"], batch["end_positions"]
-                num_correct, num_infer, num_label = metric.compute(start_prob, end_prob, start_ids, end_ids)
-                metric.update(num_correct, num_infer, num_label)
-            precision, recall, f1 = metric.accumulate()
-            logger.info("f1: %s, precision: %s, recall: %s" % (f1, precision, f1))
-            model.train()
-            return f1
-
-        trainer.compress(custom_evaluate=custom_evaluate)
-
-def evaluate() -> None:
 
 def main():
     
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--param_file",
-        default="hparams/uie.yaml",
-        type=str,
-        help="A yaml-formatted file using the extended YAML syntax. ",
-    )
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument(
+    #     "--config_file",
+    #     default="configs/train.yaml",
+    #     type=str,
+    #     help="A yaml-formatted file using the extended YAML syntax. ",
+    # )
     
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
-    with open(args.param_file, "r") as f:
+    with open("configs/train.yaml", "r") as f:
         logger.info(f"Loading the config file in {os.path.abspath(f.name)}...")
         configs = yaml.load(f, Loader=yaml.CSafeLoader)
 
-    model_args, data_args, training_args = ModelArguments(**configs["model_args"]), DataArguments(**configs["data_args"]), TrainingArguments(**configs["training_args"]),
+    model_args, data_args, training_args = ModelArguments(**configs["model_args"]), DataArguments(**configs["data_args"]), CompressionArguments(**configs["training_args"]),
 
     training_args.learning_rate = float(training_args.learning_rate)
     training_args.adam_epsilon = float(training_args.adam_epsilon)
@@ -304,12 +273,6 @@ def main():
         model_args=model_args,
         data_args=data_args,
         training_args=training_args
-    )
-
-    # Test and save 
-    evaluate(
-
-
     )
     
 
