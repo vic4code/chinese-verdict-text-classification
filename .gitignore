@@ -1,0 +1,13 @@
+# tmp and cached
+**/__pycache__/
+*.pyc
+
+# data
+**/data/formal_dataset/
+**/data/jsonl/
+**/data/luka/
+**/data/textline/
+
+# checkpoints
+**/checkpoint/
+**/checkpoints/
