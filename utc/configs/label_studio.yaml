@@ -1,9 +1,9 @@
 label_studio_args:
-    label_studio_file: "../label_studio_data/text_classification.json"
-    save_dir: "./dataset/data"
+    label_studio_file: ../label_studio_data/text_classification.json
+    save_dir: ./dataset/data
     splits: [0.8, 0.1, 0.1] # [train, dev, test]
-    text_separator: "\t"
-    task_type: "ext"
+    text_separator: \t
+    task_type: ext
     options: ["../label_studio_data/text_classification_labels.txt"]
     is_shuffle: True
     seed: 1000

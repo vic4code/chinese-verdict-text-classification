@@ -164,10 +164,6 @@ class UTCLoss(object):
         return loss
 
 
-def uie_preprocessing():
-    pass
-
-
 def read_inference_dataset(data_path, data_file=None, options="./data/label.txt"):
     """
     Load datasets with one example per line, formated as:
@@ -186,6 +182,15 @@ def read_inference_dataset(data_path, data_file=None, options="./data/label.txt"
         with open(file_path, "r", encoding="utf-8") as fp:
             for example in fp:
                 example = json.loads(example.strip())
+
+                # if isinstance(example, list):
+                #     for item in example:
+                #         item["text_a"] = item["jfull_compress"]
+                #         item["text_b"] = ""
+                #         item["choices"] = choices
+                #         yield item
+                # else:
+                example["text_a"] = example["jfull_compress"]
                 example["text_b"] = ""
                 example["choices"] = choices
                 yield example

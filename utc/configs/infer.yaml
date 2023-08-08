@@ -1,0 +1,31 @@
+# See the details of 'training_args' and 'compression_args' from the websites: https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/trainer/training_args.py and https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/trainer/compression_args.py
+model_args:
+    # utc
+    utc_model_name_or_path: utc-base # fintuned model path
+    utc_model_path: checkpoints/utc # utc model name
+    
+    # uie
+    schema: ["原告年齡", "肇事過失責任比例", "受有傷害"]
+    uie_model_name_or_path: ../uie/checkpoints/uie
+    dynamic_adjust_length: True
+    uie_output_path: ../data_to_inference
+    
+data_args:
+    # data_file_to_inference: ../data_to_inference/uie_processed_data.json
+    data_file_to_inference: ../data_to_inference/uie_processed_data.json
+    threshold: 0.5
+    single_label: False
+    label_file: ../label_studio_data/text_classification_labels.txt
+    do_uie_preprocess: False
+    last_index: 768
+
+infer_args:
+    # utc
+    output_dir: ./inference_results
+    max_seq_length: 768
+    per_device_eval_batch_size: 8
+    seed: 30678
+    device: gpu # or "cpu"
+    freeze_dropout: True
+    freeze_plm: True
+    

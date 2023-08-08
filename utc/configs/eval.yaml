@@ -1,0 +1,21 @@
+# See the details of 'training_args' and 'compression_args' from the websites: https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/trainer/training_args.py and https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/trainer/compression_args.py
+model_args:      
+    model_name_or_path: utc-base
+    model_path: ./checkpoints/utc
+
+data_args:
+    test_path: ./dataset/data/test.txt
+    threshold: 0.5
+    single_label: False
+
+eval_args:
+    output_dir: ./checkpoints/utc/test_results
+    max_seq_length: 768
+    seed: 30678
+    device: gpu # or cpu
+    disable_tqdm: True
+    metric_for_best_model: macro_f1
+    freeze_dropout: True
+    save_plm: True
+    freeze_plm: True
+    

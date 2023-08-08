@@ -14,6 +14,7 @@
 
 import json
 import os
+import yaml
 from dataclasses import dataclass, field
 from paddlenlp.utils.log import logger
 from metric import MetricReport
@@ -47,20 +48,20 @@ class ModelArguments:
     model_path: str = field(default=None, metadata={"help": "Build-in pretrained model."})
 
 
-def main():
-    # Parse the arguments.
-    parser = PdArgumentParser((ModelArguments, DataArguments, PromptTuningArguments))
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-    training_args.print_config(model_args, "Model")
-    training_args.print_config(data_args, "Data")
-    paddle.set_device(training_args.device)
+def evaluate(
+    model_args,
+    data_args,
+    eval_args
+):
+    
+    paddle.set_device(eval_args.device)
 
     # Load the pretrained language model.
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
     model = UTC.from_pretrained(model_args.model_name_or_path)
 
     # Define template for preprocess and verbalizer for postprocess.
-    template = UTCTemplate(tokenizer, training_args.max_seq_length)
+    template = UTCTemplate(tokenizer, eval_args.max_seq_length)
 
     # Load and preprocess dataset.
     if data_args.test_path is not None:
@@ -68,7 +69,7 @@ def main():
 
     # Initialize the prompt model.
     prompt_model = PromptModelForSequenceClassification(
-        model, template, None, freeze_plm=training_args.freeze_plm, freeze_dropout=training_args.freeze_dropout
+        model, template, None, freeze_plm=eval_args.freeze_plm, freeze_dropout=eval_args.freeze_dropout
     )
     if model_args.model_path is not None:
         model_state = paddle.load(os.path.join(model_args.model_path, "model_state.pdparams"))
@@ -100,96 +101,24 @@ def main():
 
         return {"micro_f1": micro_f1, "macro_f1": macro_f1}
 
-    def compute_metrics_sklearn(eval_preds):
-        separate_eval = True
-        metric = MetricReport()
-        metric.reset()
-
-        labels = paddle.to_tensor(eval_preds.label_ids, dtype="int64")
-        preds = paddle.to_tensor(eval_preds.predictions)
-        preds = paddle.nn.functional.sigmoid(preds)
-
-        logger.debug(preds)
-
-        # logger.debug(f"Prediction: {np.where(preds[labels != -100] > data_args.threshold)}")
-        # logger.debug(f"Ground True: {np.where(labels[labels != -100])}")
-
-        # logger.debug(
-        #    f"not the same: {np.where((preds[labels != -100] > data_args.threshold) != labels[labels != -100])}"
-        # )
-
-        # breakpoint()
-        # preds = preds[labels != -100]
-        # labels = labels[labels != -100]
-        preds = preds > data_args.threshold
-
-        logger.info(f"Number of All True 1 labels: {paddle.sum(labels==1).item()}")
-        logger.info(f"Number of All Predict 1 label: {paddle.sum(preds).item()}")
-        if labels.shape[1] != 55:
-            logger.warning(
-                "Cannot apply separate evaluate. Due to the number of labels is not equal to 55. (Add or Remove labels ever?)"
-            )
-            separate_eval = False
-
-        if separate_eval:
-            label_name = ["體傷部位", "體傷程度", "肇事責任", "年齡"]
-            # 部位: 0~8
-            preds_injure_part = preds[:, :9]
-            labels_injure_part = labels[:, :9]
-
-            # 傷勢: 9 ~ 35
-            preds_injure_level = preds[:, 9:36]
-            labels_injure_level = labels[:, 9:36]
-
-            # 肇事: 36 ~ 46
-            preds_responsibility = preds[:, 36:47]
-            labels_responsibility = labels[:, 36:47]
-
-            # 年齡: 47 ~ 54
-            preds_age = preds[:, 47:]
-            labels_age = labels[:, 47:]
-
-            preds_list = (preds_injure_part, preds_injure_level, preds_responsibility, preds_age)
-            labels_list = (labels_injure_part, labels_injure_level, labels_responsibility, labels_age)
-
-            for p, l, name in zip(preds_list, labels_list, label_name):
-                metric.update(p, l)
-                micro_f1_score, macro_f1_score, accuracy, precision, recall = metric.accumulate()
-                logger.debug(f"====={name}=====")
-                logger.debug(
-                    f"micro_f1_score: {micro_f1_score}. macro_f1_score: {macro_f1_score}. accuracy: {accuracy}. precision: {precision}. recall: {recall}."
-                )
-                metric.reset()
-
-        metric.update(preds, labels)
-        micro_f1_score, macro_f1_score, accuracy, precision, recall = metric.accumulate()
-        metric.reset()
-        return {
-            "eval_micro_f1": micro_f1_score,
-            "eval_macro_f1": macro_f1_score,
-            "accuracy_score": accuracy,
-            "precision_score": precision,
-            "recall_score": recall,
-        }
-
     trainer = PromptTrainer(
         model=prompt_model,
         tokenizer=tokenizer,
-        args=training_args,
+        args=eval_args,
         criterion=UTCLoss(),
         train_dataset=None,
         eval_dataset=None,
         callbacks=None,
-        compute_metrics=compute_metrics_single_label if data_args.single_label else compute_metrics_sklearn,
+        compute_metrics=compute_metrics_single_label if data_args.single_label else compute_metrics,
     )
 
     if data_args.test_path is not None:
         test_ret = trainer.predict(test_ds)
         trainer.log_metrics("test", test_ret.metrics)
-        with open(os.path.join(training_args.output_dir, "test_metric.json"), "w", encoding="utf-8") as fp:
+        with open(os.path.join(eval_args.output_dir, "test_metric.json"), "w", encoding="utf-8") as fp:
             json.dump(test_ret.metrics, fp)
 
-        with open(os.path.join(training_args.output_dir, "test_predictions.json"), "w", encoding="utf-8") as fp:
+        with open(os.path.join(eval_args.output_dir, "test_predictions.json"), "w", encoding="utf-8") as fp:
             if data_args.single_label:
                 preds = paddle.nn.functional.softmax(paddle.to_tensor(test_ret.predictions), axis=-1)
                 for index, pred in enumerate(preds):
@@ -204,6 +133,26 @@ def main():
                     result["labels"] = paddle.where(pred > data_args.threshold)[0].tolist()
                     result["probs"] = pred[pred > data_args.threshold].tolist()
                     fp.write(json.dumps(result, ensure_ascii=False) + "\n")
+
+
+def main():
+
+    # Load config file
+    with open("configs/eval.yaml", "r") as f:
+        logger.info(f"Loading the config file in {os.path.abspath(f.name)}...")
+        configs = yaml.load(f, Loader=yaml.CSafeLoader)
+    
+    # Parse the arguments.
+    model_args, data_args, eval_args = ModelArguments(**configs["model_args"]), DataArguments(**configs["data_args"]), PromptTuningArguments(**configs["eval_args"]),
+    eval_args.print_config(model_args, "Model")
+    eval_args.print_config(data_args, "Data")
+
+    # Eval test data
+    evaluate(
+        model_args,
+        data_args,
+        eval_args
+    )
 
 
 if __name__ == "__main__":

@@ -52,14 +52,6 @@ class DataArguments:
     )
     train_file: str = field(default="train.txt", metadata={"help": "Train dataset file name."})
     dev_file: str = field(default="dev.txt", metadata={"help": "Dev dataset file name."})
-    # threshold: float = field(default=0.5, metadata={"help": "The threshold to produce predictions."})
-    # max_seq_length: Optional[int] = field(
-    #     default=512,
-    #     metadata={
-    #         "help": "The maximum total input sequence length after tokenization. Sequences longer "
-    #         "than this will be truncated, sequences shorter will be padded."
-    #     },
-    # )
     single_label: str = field(default=False, metadata={"help": "Predict exactly one label per sample."})
 
 
@@ -73,7 +65,7 @@ class ModelArguments:
         },
     )
     export_type: str = field(default="paddle", metadata={"help": "The type to export. Support `paddle` and `onnx`."})
-    export_model_dir: str = field(default="checkpoints/model_best", metadata={"help": "The export model path."})
+    export_model_dir: str = field(default=None, metadata={"help": "The export model path."})
 
 
 def finetune(
@@ -108,13 +100,6 @@ def finetune(
         lazy=False,
     )
 
-    # test_ds = load_dataset(
-    #     read_local_dataset,
-    #     data_path=data_args.dataset_path,
-    #     data_file=data_args.test_file,
-    #     lazy=False,
-    # )
-
     # Define the criterion.
     criterion = UTCLoss()
 
@@ -135,7 +120,7 @@ def finetune(
         acc = metric.accumulate()
         return {"accuracy": acc}
 
-    def compute_metrics_paddle(eval_preds):
+    def compute_metrics(eval_preds):
         metric = MetricReport()
         preds = paddle.to_tensor(eval_preds.predictions)
         metric.reset()
@@ -150,78 +135,7 @@ def finetune(
             "recall_score": recall,
         }
 
-    def compute_metrics_sklearn(eval_preds):
-        separate_eval = True
-        metric = MetricReport()
-        metric.reset()
-
-        labels = paddle.to_tensor(eval_preds.label_ids, dtype="int64")
-        preds = paddle.to_tensor(eval_preds.predictions)
-        preds = paddle.nn.functional.sigmoid(preds)
-
-        logger.debug(preds)
-
-        # logger.debug(f"Prediction: {np.where(preds[labels != -100] > data_args.threshold)}")
-        # logger.debug(f"Ground True: {np.where(labels[labels != -100])}")
-
-        # logger.debug(
-        #    f"not the same: {np.where((preds[labels != -100] > data_args.threshold) != labels[labels != -100])}"
-        # )
-
-        # breakpoint()
-        # preds = preds[labels != -100]
-        # labels = labels[labels != -100]
-        preds = preds > data_args.threshold
-
-        logger.info(f"Number of All True 1 labels: {paddle.sum(labels==1).item()}")
-        logger.info(f"Number of All Predict 1 label: {paddle.sum(preds).item()}")
-        if labels.shape[1] != 55:
-            logger.warning(
-                "Cannot apply separate evaluate. Due to the number of labels is not equal to 55. (Add or Remove labels ever?)"
-            )
-            separate_eval = False
-
-        if separate_eval:
-            label_name = ["體傷部位", "體傷程度", "肇事責任", "年齡"]
-            # 部位: 0~8
-            preds_injure_part = preds[:, :9]
-            labels_injure_part = labels[:, :9]
-
-            # 傷勢: 9 ~ 35
-            preds_injure_level = preds[:, 9:36]
-            labels_injure_level = labels[:, 9:36]
-
-            # 肇事: 36 ~ 46
-            preds_responsibility = preds[:, 36:47]
-            labels_responsibility = labels[:, 36:47]
-
-            # 年齡: 47 ~ 54
-            preds_age = preds[:, 47:]
-            labels_age = labels[:, 47:]
-
-            preds_list = (preds_injure_part, preds_injure_level, preds_responsibility, preds_age)
-            labels_list = (labels_injure_part, labels_injure_level, labels_responsibility, labels_age)
-
-            for p, l, name in zip(preds_list, labels_list, label_name):
-                metric.update(p, l)
-                micro_f1_score, macro_f1_score, accuracy, precision, recall = metric.accumulate()
-                logger.debug(f"====={name}=====")
-                logger.debug(
-                    f"micro_f1_score: {micro_f1_score}. macro_f1_score: {macro_f1_score}. accuracy: {accuracy}. precision: {precision}. recall: {recall}."
-                )
-                metric.reset()
-
-        metric.update(preds, labels)
-        micro_f1_score, macro_f1_score, accuracy, precision, recall = metric.accumulate()
-        metric.reset()
-        return {
-            "eval_micro_f1": micro_f1_score,
-            "eval_macro_f1": macro_f1_score,
-            "accuracy_score": accuracy,
-            "precision_score": precision,
-            "recall_score": recall,
-        }
-
+ 
     trainer = PromptTrainer(
         model=prompt_model,
         tokenizer=tokenizer,
@@ -230,10 +144,8 @@ def finetune(
         train_dataset=train_ds,
         eval_dataset=dev_ds,
         callbacks=None,
-        compute_metrics=compute_metrics_sklearn,
+        compute_metrics=compute_metrics,
     )
-    # compute_metrics=compute_metrics_single_label if data_args.single_label else compute_metrics,
-    # data_collator=myDataCollator(tokenizer, padding=True, return_tensors="pd"),
 
     # Training.
     if training_args.do_train:
@@ -244,9 +156,10 @@ def finetune(
         trainer.save_metrics("train", metrics)
         trainer.save_state()
 
-    if training_args.do_predict:
-        test_metrics = trainer.evaluate(eval_dataset=dev_ds)
-        trainer.log_metrics("test", test_metrics)
+    # Evaluation
+    if training_args.do_eval:
+        eval_metrics = trainer.evaluate()
+        trainer.log_metrics("eval", eval_metrics)
 
     # Export.
     if training_args.do_export:
