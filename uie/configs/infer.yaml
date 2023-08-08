@@ -1,21 +1,16 @@
-data_args:
-    data_file: "./data/information_extraction/model_infer_data/example_for_json_type_data.json"
-    data_type: "json_type"
-    save_dir: "./reports/information_extraction/inference_results/"
-    save_name: "inference_results.json"
-    is_regularize_data: True
-    text_list: null
+infer_args:
+    # Data args
+    dataset_path: ../utc/dataset/data
+    label_file: ../label_studio_data/text_classification_labels.txt
+    max_seq_len: 768
+    last_index: 768
 
-taskflow_args:
-    device_id: -1
-    precision: "fpew"
-    batch_size: 1
-    model: "uie-base"
-    task_path: null
-    #task_path: "../Chinese-Verdict-NLP/results/checkpoint/model_best"
-    #task_path: "./models/information_extraction/checkpoint/model_best"
-
-strategy_args:
-    select_strategy: "all"
-    select_strategy_threshold: 0.5
-    select_key: ["text", "start", "end", "probability"]
+    # Model args
+    schema: ["原告年齡", "肇事過失責任比例", "受有傷害"]
+    utc_model_name_or_path: checkpoints/utc
+    uie_model_name_or_path: ../uie/checkpoints/uie
+    output_path: ../utc/dataset/uie_processed_data
+    precision: fpew
+    threshold: 0.4
+    dynamic_adjust_length: True
+    

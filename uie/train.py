@@ -28,6 +28,7 @@ from utils import (
     unify_prompt_name,
 )
 
+from data_prepare import data_prepare
 from paddlenlp.data import DataCollatorWithPadding
 from paddlenlp.datasets import load_dataset
 from paddlenlp.metrics import SpanEvaluator
@@ -206,7 +207,7 @@ def finetune(
         trainer.save_state()
 
 
-    # Evaluate and tests model
+    # Evaluation
     if training_args.do_eval:
         eval_metrics = trainer.evaluate()
         trainer.log_metrics("eval", eval_metrics)
@@ -242,16 +243,21 @@ def finetune(
 
 def main():
     
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     "--config_file",
-    #     default="configs/train.yaml",
-    #     type=str,
-    #     help="A yaml-formatted file using the extended YAML syntax. ",
-    # )
-    
-    # args = parser.parse_args()
+    # Label studio data preparation
+    with open("configs/label_studio.yaml", "r") as f:
+        logger.info(f"Loading the config file in {os.path.abspath(f.name)}...")
+        configs = yaml.load(f, Loader=yaml.CSafeLoader)
 
+    parser = argparse.ArgumentParser(description='Argument Parser from Dictionary')
+    for key, value in configs["label_studio_args"].items():
+        arg_name = '--' + key
+        parser.add_argument(arg_name, default=value, type=type(value))
+
+    label_studio_args = parser.parse_args()
+    logger.info(f"Preparing dataset from label studio data...")
+    data_prepare(label_studio_args)
+
+    # Modeling
     with open("configs/train.yaml", "r") as f:
         logger.info(f"Loading the config file in {os.path.abspath(f.name)}...")
         configs = yaml.load(f, Loader=yaml.CSafeLoader)

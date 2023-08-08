@@ -72,7 +72,7 @@ def evaluate(args):
     else:
         model = UIE.from_pretrained(args.model_path)
 
-    test_ds = load_dataset(reader, data_path=args.test_path, max_seq_len=args.max_seq_len, lazy=False)
+    test_ds = load_dataset(reader, data_path=args.test_path, max_seq_len=args.max_seq_length, lazy=False)
     class_dict = {}
     relation_data = []
     if args.debug:
@@ -91,7 +91,7 @@ def evaluate(args):
         class_dict["all_classes"] = test_ds
 
     trans_fn = partial(
-        convert_example, tokenizer=tokenizer, max_seq_len=args.max_seq_len, multilingual=args.multilingual
+        convert_example, tokenizer=tokenizer, max_seq_len=args.max_seq_length, multilingual=args.multilingual
     )
     
     
@@ -119,7 +119,7 @@ def evaluate(args):
         }
 
         if not os.path.exists(args.output_dir):
-                os.makedirs(args.output_dir)
+            os.makedirs(args.output_dir)
 
         with open(os.path.join(args.output_dir, "test_metrics.json"), "w", encoding="utf-8") as fp:
             json.dump(metrics, fp)

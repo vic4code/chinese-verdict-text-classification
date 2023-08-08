@@ -1,0 +1,12 @@
+label_studio_args:
+    label_studio_file: ../label_studio_data/uie_preprocessor_data.json
+    save_dir: ./dataset
+    negative_ratio: 5
+    splits: [0.9, 0, 0.1] # [train, dev, test]
+    task_type: ext
+    options: ["正向", "负向"]
+    prompt_prefix: 情感倾向
+    is_shuffle: True
+    seed: 1000
+    separator: "##""
+    schema_lang: ch
